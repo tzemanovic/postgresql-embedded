@@ -298,6 +298,17 @@ impl PostgreSQL {
             std::fs::create_dir_all(socket_dir)?;
         }
 
+        let pid_file = self.settings.data_dir.join("postmaster.pid");
+        println!("[start] data_dir={}", self.settings.data_dir.display());
+        println!("[start] postmaster.pid exists before start: {}", pid_file.exists());
+        if pid_file.exists() {
+            println!("[start] postmaster.pid contents:\n{}", std::fs::read_to_string(&pid_file).unwrap_or_default());
+        }
+        if let Ok(entries) = std::fs::read_dir(&self.settings.data_dir) {
+            let names: Vec<_> = entries.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+            println!("[start] data_dir contents: {names:?}");
+        }
+
         let auto_port = self.settings.port == 0;
         let mut retries_left = 3u32;
 
@@ -306,6 +317,8 @@ impl PostgreSQL {
                 // assign a random ephemeral port
                 self.settings.port = rand::rng().random_range(49152u16..=65535);
             }
+
+            println!("[start] attempt with port={}, retries_left={retries_left}", self.settings.port);
 
             debug!(
                 "Starting database {} on port {}{}",
@@ -341,6 +354,7 @@ impl PostgreSQL {
 
             match self.execute_command(pg_ctl).await {
                 Ok((_stdout, _stderr)) => {
+                    println!("[start] success on port={}", self.settings.port);
                     debug!(
                         "Started database {} on port {}{}",
                         self.settings.data_dir.to_string_lossy(),
@@ -356,18 +370,38 @@ impl PostgreSQL {
                     return Ok(());
                 }
                 Err(error) => {
+                    let msg = error.to_string();
+                    println!("[start] pg_ctl error: {msg}");
+                    println!("[start] start.log: {}", std::fs::read_to_string(&start_log).unwrap_or_default());
+                    println!("[start] postmaster.pid exists after failure: {}", pid_file.exists());
+                    if pid_file.exists() {
+                        println!("[start] postmaster.pid contents:\n{}", std::fs::read_to_string(&pid_file).unwrap_or_default());
+                    }
+                    // Postgres verifies the PID in postmaster.pid is alive before
+                    // emitting this FATAL, so we can trust it: another postgres is
+                    // running on this data_dir (e.g. from a previously cancelled
+                    // start() future whose pg_ctl child kept going).  Adopt it.
+                    if is_already_running(&msg, &start_log) {
+                        if let Some(port) = postmaster_port(&self.settings.data_dir) {
+                            self.settings.port = port;
+                            return Ok(());
+                        }
+                    }
                     retries_left -= 1;
-                    if auto_port
-                        && retries_left > 0
-                        && is_port_conflict(&error.to_string(), &start_log)
-                    {
+                    if auto_port && retries_left > 0 && is_port_conflict(&msg, &start_log) {
+                        // Postgres writes postmaster.pid before attempting to bind.
+                        // On port conflict it exits and removes the file, but pg_ctl
+                        // may return to us before that cleanup completes.  Wait for
+                        // the file to disappear before the next attempt so the new
+                        // postgres process doesn't trip over the stale lock file.
+                        wait_for_pid_cleanup(&self.settings.data_dir);
                         debug!(
                             "Port {} already in use, retrying with a new port ({retries_left} retries left)",
                             self.settings.port
                         );
                         continue;
                     }
-                    return Err(DatabaseStartError(error.to_string()));
+                    return Err(DatabaseStartError(msg));
                 }
             }
         }
@@ -565,4 +599,32 @@ fn is_port_conflict(error: &str, start_log: &Path) -> bool {
         || std::fs::read_to_string(start_log)
             .map(|log| conflict(&log))
             .unwrap_or(false)
+}
+
+fn is_already_running(error: &str, start_log: &Path) -> bool {
+    let check = |s: &str| s.contains("lock file") && s.contains("already exists");
+    check(error)
+        || std::fs::read_to_string(start_log)
+            .map(|log| check(&log))
+            .unwrap_or(false)
+}
+
+// postmaster.pid line 4 (0-indexed line 3) is the port number.
+fn postmaster_port(data_dir: &Path) -> Option<u16> {
+    let content = std::fs::read_to_string(data_dir.join("postmaster.pid")).ok()?;
+    content.lines().nth(3)?.trim().parse().ok()
+}
+
+// Postgres removes postmaster.pid on exit, but may not finish before pg_ctl
+// returns the error to us.  Poll until the file is gone, then force-remove it
+// if the timeout expires (the process failed to start, so the file is orphaned).
+fn wait_for_pid_cleanup(data_dir: &Path) {
+    let pid_file = data_dir.join("postmaster.pid");
+    for _ in 0..20 {
+        if !pid_file.exists() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let _ = std::fs::remove_file(&pid_file);
 }
