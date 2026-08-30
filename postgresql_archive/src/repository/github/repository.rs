@@ -14,7 +14,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::RetryTransientMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_tracing::TracingMiddleware;
-use semver::{Version, VersionReq};
+use semver::{Op, Prerelease, Version, VersionReq};
 use std::env;
 use std::io::Write;
 use std::str::FromStr;
@@ -98,6 +98,49 @@ impl GitHub {
         }
     }
 
+    /// Returns the exact [Version] if the [version requirement](VersionReq) matches only that
+    /// single, fully-specified version (e.g. "=15.13.0"). Returns `None` for ranges, wildcards,
+    /// or partially-specified versions (e.g. "=15"), which require scanning the release list.
+    fn exact_version(version_req: &VersionReq) -> Option<Version> {
+        let [comparator] = version_req.comparators.as_slice() else {
+            return None;
+        };
+        if comparator.op != Op::Exact || comparator.pre != Prerelease::EMPTY {
+            return None;
+        }
+        let minor = comparator.minor?;
+        let patch = comparator.patch?;
+        Some(Version::new(comparator.major, minor, patch))
+    }
+
+    /// Resolves an exact release via GitHub's "get a release by tag name" endpoint, which is a
+    /// single request instead of a full pagination scan of the releases list. Returns `None` if
+    /// `version_req` is not a single exact version, or if no release is tagged with that version
+    /// (trying both a bare tag, e.g. "15.13.0", and a 'v'-prefixed tag, e.g. "v15.13.0").
+    async fn get_release_by_exact_version(
+        &self,
+        client: &ClientWithMiddleware,
+        version_req: &VersionReq,
+    ) -> Option<Release> {
+        let version = Self::exact_version(version_req)?;
+
+        for tag_name in [version.to_string(), format!("v{version}")] {
+            let url = format!("{}/tags/{tag_name}", self.releases_url);
+            let request = client.get(&url).headers(Self::headers());
+            let Ok(response) = request.send().await else {
+                continue;
+            };
+            if !response.status().is_success() {
+                continue;
+            }
+            if let Ok(release) = response.json::<Release>().await {
+                return Some(release);
+            }
+        }
+
+        None
+    }
+
     /// Gets the release for the specified [version requirement](VersionReq). If a release for the
     /// [version requirement](VersionReq) is not found, then an error is returned.
     ///
@@ -107,6 +150,15 @@ impl GitHub {
     async fn get_release(&self, version_req: &VersionReq) -> Result<Release> {
         debug!("Attempting to locate release for version requirement {version_req}");
         let client = reqwest_client();
+
+        if let Some(release) = self
+            .get_release_by_exact_version(&client, version_req)
+            .await
+        {
+            debug!("Release {} found via tag lookup", release.tag_name);
+            return Ok(release);
+        }
+
         let mut result: Option<Release> = None;
         let mut page = 1;
 
@@ -329,6 +381,28 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn test_exact_version() {
+        let version_req = VersionReq::parse("=15.13.0").unwrap();
+        assert_eq!(
+            Some(Version::new(15, 13, 0)),
+            GitHub::exact_version(&version_req)
+        );
+    }
+
+    #[test]
+    fn test_exact_version_not_exact() {
+        let version_reqs = vec![
+            VersionReq::STAR,
+            VersionReq::parse("15").unwrap(),
+            VersionReq::parse("^15.13.0").unwrap(),
+            VersionReq::parse(">=15.13.0, <16.0.0").unwrap(),
+        ];
+        for version_req in version_reqs {
+            assert_eq!(None, GitHub::exact_version(&version_req));
+        }
     }
 
     #[test]
