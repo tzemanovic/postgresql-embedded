@@ -3,7 +3,6 @@
 [![ci](https://github.com/theseus-rs/postgresql-embedded/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/theseus-rs/postgresql-embedded/actions/workflows/ci.yml)
 [![Documentation](https://docs.rs/postgresql_extensions/badge.svg)](https://docs.rs/postgresql_extensions)
 [![Code Coverage](https://codecov.io/gh/theseus-rs/postgresql-embedded/branch/main/graph/badge.svg)](https://codecov.io/gh/theseus-rs/postgresql-embedded)
-[![Benchmarks](https://img.shields.io/badge/%F0%9F%90%B0_bencher-enabled-6ec241)](https://bencher.dev/perf/theseus-rs-postgresql-embedded)
 [![Latest version](https://img.shields.io/crates/v/postgresql_extensions.svg)](https://crates.io/crates/postgresql_extensions)
 [![License](https://img.shields.io/crates/l/postgresql_extensions?)](https://github.com/theseus-rs/postgresql-embedded/tree/main/postgresql_extensions#license)
 [![Semantic Versioning](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F_SemVer-2.0.0-blue)](https://semver.org/spec/v2.0.0.html)
@@ -38,20 +37,19 @@ async fn main() -> Result<()> {
 
 ## Feature flags
 
-postgresql_extensions uses [feature flags] to address compile time and binary size
-uses.
+postgresql_extensions uses [feature flags] to address compile time and binary size uses.
 
 The following features are available:
 
-| Name                       | Description                                      | Default? |
-|----------------------------|--------------------------------------------------|----------|
-| `blocking`                 | Enables the blocking API                         | No       |
-| `tls-native-tls`           | Enables Native TLS support                       | Yes      |
-| `tls-rustls-aws-lc-rs`     | Enables Rustls with the AWS-LC crypto provider   | No       |
-| `tls-rustls-ring`          | Enables Rustls with the Ring crypto provider     | No       |
+| Name                   | Description                                    | Default? |
+|------------------------|------------------------------------------------|----------|
+| `blocking`             | Enables the blocking API                       | No       |
+| `tls-native-tls`       | Enables Native TLS support                     | Yes      |
+| `tls-rustls-aws-lc-rs` | Enables Rustls with the AWS-LC crypto provider | No       |
+| `tls-rustls-ring`      | Enables Rustls with the Ring crypto provider   | No       |
 
-To use Ring without compiling AWS-LC, disable default features and enable `tls-rustls-ring` together with the
-required repository features.
+To use Ring without compiling AWS-LC, disable default features and enable `tls-rustls-ring` together with the required
+repository features.
 
 ### Repositories
 
