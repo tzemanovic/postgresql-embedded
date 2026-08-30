@@ -3,19 +3,17 @@
 [![ci](https://github.com/theseus-rs/postgresql-embedded/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/theseus-rs/postgresql-embedded/actions/workflows/ci.yml)
 [![Documentation](https://docs.rs/postgresql_embedded/badge.svg)](https://docs.rs/postgresql_embedded)
 [![Code Coverage](https://codecov.io/gh/theseus-rs/postgresql-embedded/branch/main/graph/badge.svg)](https://codecov.io/gh/theseus-rs/postgresql-embedded)
-[![Benchmarks](https://img.shields.io/badge/%F0%9F%90%B0_bencher-enabled-6ec241)](https://bencher.dev/perf/theseus-rs-postgresql-embedded)
 [![Latest version](https://img.shields.io/crates/v/postgresql_embedded.svg)](https://crates.io/crates/postgresql_embedded)
 [![License](https://img.shields.io/crates/l/postgresql_embedded)](https://github.com/theseus-rs/postgresql-embedded/tree/main/postgresql_embedded#license)
 [![Semantic Versioning](https://img.shields.io/badge/%E2%9A%99%EF%B8%8F_SemVer-2.0.0-blue)](https://semver.org/spec/v2.0.0.html)
 
-Install and run a PostgreSQL database locally on Linux, MacOS or Windows. PostgreSQL can be
-bundled with your application, or downloaded on demand.
+Install and run a PostgreSQL database locally on Linux, MacOS or Windows. PostgreSQL can be bundled with your
+application, or downloaded on demand.
 
-This library provides an embedded-like experience for PostgreSQL similar to what you would have with
-SQLite. This is accomplished by downloading and installing PostgreSQL during runtime. There is
-also a "bundled" feature that when enabled, will download the PostgreSQL installation archive at
-compile time, include it in your binary and install from the binary version at runtime.
-In either case, PostgreSQL will run in a separate process space.
+This library provides an embedded-like experience for PostgreSQL similar to what you would have with SQLite. This is
+accomplished by downloading and installing PostgreSQL during runtime. There is also a "bundled" feature that when
+enabled, will download the PostgreSQL installation archive at compile time, include it in your binary and install from
+the binary version at runtime. In either case, PostgreSQL will run in a separate process space.
 
 ## Features
 
@@ -123,53 +121,51 @@ async fn main() -> Result<()> {
 
 ## Information
 
-During the build process, when the `bundled` feature is enabled, the PostgreSQL binaries are
-downloaded and included in the resulting binary. The version of the PostgreSQL binaries is
-determined by the `POSTGRESQL_VERSION` environment variable. If the `POSTGRESQL_VERSION`
-environment variable is not set, then `postgresql_archive::LATEST` will be used to determine the
-version of the PostgreSQL binaries to download.
+During the build process, when the `bundled` feature is enabled, the PostgreSQL binaries are downloaded and included in
+the resulting binary. The version of the PostgreSQL binaries is determined by the `POSTGRESQL_VERSION` environment
+variable. If the `POSTGRESQL_VERSION`
+environment variable is not set, then `postgresql_archive::LATEST` will be used to determine the version of the
+PostgreSQL binaries to download.
 
 When downloading the theseus PostgreSQL binaries, either during build, or at runtime, the
-`GITHUB_TOKEN` environment variable can be set to a GitHub personal access token to increase
-the rate limit for downloading the PostgreSQL binaries. The `GITHUB_TOKEN` environment
-variable is not required.
+`GITHUB_TOKEN` environment variable can be set to a GitHub personal access token to increase the rate limit for
+downloading the PostgreSQL binaries. The `GITHUB_TOKEN` environment variable is not required.
 
 At runtime, the PostgreSQL binaries are cached by default in the following directories:
 
 - Unix: `$HOME/.theseus/postgresql`
 - Windows: `%USERPROFILE%\.theseus\postgresql`
 
-Performance can be improved by using a specific version of the PostgreSQL binaries (e.g. `=16.4.0`).
-After the first download, the PostgreSQL binaries will be cached and reused for subsequent runs.
-Further, the repository will no longer be queried to calculate the version match.
+Performance can be improved by using a specific version of the PostgreSQL binaries (e.g. `=16.4.0`). After the first
+download, the PostgreSQL binaries will be cached and reused for subsequent runs. Further, the repository will no longer
+be queried to calculate the version match.
 
 ## Feature flags
 
-postgresql_embedded uses feature flags to address compile time and binary size
-uses.
+postgresql_embedded uses feature flags to address compile time and binary size uses.
 
 The following features are available:
 
-| Name                       | Description                                              | Default? |
-|----------------------------|----------------------------------------------------------|----------|
-| `bundled`                  | Bundles the PostgreSQL archive into the resulting binary | No       |
-| `blocking`                 | Enables the blocking API; requires `tokio`               | No       |
-| `indicatif`                | Enables tracing-indcatif support                         | No       |
-| `tls-native-tls`           | Enables Native TLS support                               | Yes      |
-| `tls-rustls-aws-lc-rs`     | Enables Rustls with the AWS-LC crypto provider           | No       |
-| `tls-rustls-ring`          | Enables Rustls with the Ring crypto provider             | No       |
-| `theseus`                  | Enables theseus PostgreSQL binaries                      | Yes      |
-| `tokio`                    | Enables using tokio for async                            | No       |
-| `zonky`                    | Enables zonky PostgreSQL binaries                        | No       |
+| Name                   | Description                                              | Default? |
+|------------------------|----------------------------------------------------------|----------|
+| `bundled`              | Bundles the PostgreSQL archive into the resulting binary | No       |
+| `blocking`             | Enables the blocking API; requires `tokio`               | No       |
+| `indicatif`            | Enables tracing-indcatif support                         | No       |
+| `tls-native-tls`       | Enables Native TLS support                               | Yes      |
+| `tls-rustls-aws-lc-rs` | Enables Rustls with the AWS-LC crypto provider           | No       |
+| `tls-rustls-ring`      | Enables Rustls with the Ring crypto provider             | No       |
+| `theseus`              | Enables theseus PostgreSQL binaries                      | Yes      |
+| `tokio`                | Enables using tokio for async                            | No       |
+| `zonky`                | Enables zonky PostgreSQL binaries                        | No       |
 
-To use Ring without compiling AWS-LC, disable default features and enable `tls-rustls-ring` together with the
-required PostgreSQL binary source features.
+To use Ring without compiling AWS-LC, disable default features and enable `tls-rustls-ring` together with the required
+PostgreSQL binary source features.
 
 ## Bundling PostgreSQL
 
 To bundle PostgreSQL with your application, you can enable the `bundled` feature. This will download the PostgreSQL
-archive at compile time and include it in your binary. You should specify the version of PostgreSQL to bundle by
-setting the environment variable `POSTGRESQL_VERSION` to a specific version, e.g. `=17.2.0`. In order to use the bundled
+archive at compile time and include it in your binary. You should specify the version of PostgreSQL to bundle by setting
+the environment variable `POSTGRESQL_VERSION` to a specific version, e.g. `=17.2.0`. In order to use the bundled
 PostgreSQL, you will also need to set an explicit matching version at runtime in `Settings`:
 
 ```rust
