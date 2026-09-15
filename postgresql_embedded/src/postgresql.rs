@@ -15,11 +15,11 @@ use postgresql_commands::initdb::InitDbBuilder;
 use postgresql_commands::pg_ctl::Mode::{Start, Stop};
 use postgresql_commands::pg_ctl::PgCtlBuilder;
 use postgresql_commands::pg_ctl::ShutdownMode::Fast;
-use rand::RngExt;
 use semver::Version;
 use sqlx::{PgPool, Row};
 use std::fs::{read_dir, remove_dir_all, remove_file};
 use std::io::prelude::*;
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use tracing::{debug, instrument};
 
@@ -282,7 +282,10 @@ impl PostgreSQL {
     }
 
     /// Start the database and wait for the startup to complete.
-    /// If the port is set to `0`, the database will be started on a random port.
+    /// If the port is set to `0`, the database will be started on an ephemeral port assigned by
+    /// the OS. If that port turns out to be unavailable by the time the server
+    /// actually binds to it, a new ephemeral port is requested and startup is retried up to
+    /// [`Settings::port_retries`](crate::Settings::port_retries) times.
     /// If `socket_dir` is configured, the server will also listen on a Unix socket.
     ///
     /// # Errors
@@ -299,13 +302,16 @@ impl PostgreSQL {
         }
 
         let auto_port = self.settings.port == 0;
-        let mut retries_left = 3u32;
+        let mut retries_left = self.settings.port_retries;
 
         loop {
-            if auto_port {
-                // assign a random ephemeral port
-                self.settings.port = rand::rng().random_range(49152u16..=65535);
-            }
+            let ephemeral_listener = if auto_port {
+                let listener = TcpListener::bind(("0.0.0.0", 0))?;
+                self.settings.port = listener.local_addr()?.port();
+                Some(listener)
+            } else {
+                None
+            };
 
             debug!(
                 "Starting database {} on port {}{}",
@@ -339,6 +345,9 @@ impl PostgreSQL {
                 .options(options.as_slice())
                 .wait();
 
+            // Release the reserved port before starting the server
+            drop(ephemeral_listener);
+
             match self.execute_command(pg_ctl).await {
                 Ok((_stdout, _stderr)) => {
                     debug!(
@@ -356,11 +365,11 @@ impl PostgreSQL {
                     return Ok(());
                 }
                 Err(error) => {
-                    retries_left -= 1;
                     if auto_port
                         && retries_left > 0
                         && is_port_conflict(&error.to_string(), &start_log)
                     {
+                        retries_left -= 1;
                         debug!(
                             "Port {} already in use, retrying with a new port ({retries_left} retries left)",
                             self.settings.port
